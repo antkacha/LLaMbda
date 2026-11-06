@@ -5,6 +5,7 @@ import PySupport
 import Lambek (Reading)
 import Data.Char (ord)
 import Numeric (showHex)
+import Data.List (elemIndex)
 
 -- Префикс отличает связанные переменные от имён в базе фактов.
 pyVar :: Var -> String
@@ -63,3 +64,41 @@ evalReading :: PythonHandle -> Reading PythonCode -> IO String
 evalReading handle reading =
   runPythonCode handle
     (PCode ("__llrun(" ++ pyStringLit (readingToPython reading) ++ ")"))
+
+    -- Форма выражения для сравнения прочтений.
+-- У связанных переменных сравниваем положение, а не имя.
+data Meaning
+  = Bound Int
+  | WordMeaning Var String
+  | Apply Meaning Meaning
+  | Abstract Meaning
+  | Conjunction [Meaning]
+  deriving (Eq, Show)
+
+readingMeaning :: Reading PythonCode -> Meaning
+readingMeaning (expr, env) = go [] expr
+  where
+    go bound (V x) =
+      case elemIndex x bound of
+        Just i  -> Bound i
+        Nothing -> WordMeaning x (maybe "" text (lookup x env))
+
+    -- Для стандартного and убираем различия в расстановке скобок.
+    go bound (A (A (V f) a) b)
+      | f `notElem` bound && isAnd f =
+          Conjunction (parts (go bound a) ++ parts (go bound b))
+
+    go bound (A f x) = Apply (go bound f) (go bound x)
+    go bound (L x e) = Abstract (go (x : bound) e)
+
+    isAnd f =
+      case lookup f env of
+        Just code ->
+          words (text code) == words "lambda x : lambda y : x and y"
+        Nothing -> False
+
+    parts (Conjunction xs) = xs
+    parts x = [x]
+
+sameMeaning :: Reading PythonCode -> Reading PythonCode -> Bool
+sameMeaning a b = readingMeaning a == readingMeaning b

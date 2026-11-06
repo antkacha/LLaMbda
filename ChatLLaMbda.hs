@@ -10,7 +10,7 @@ import PySupport
 
 import LExp (prettyLExp)
 import Semantics
-import Data.List (nub, intercalate)
+import Data.List (nub, nubBy, intercalate)
 
 -- "standardize" the capitalization of a word by making the first
 -- letter uppercase and the following letters lowercase.
@@ -40,7 +40,8 @@ repl showDerivs elx phandle = do
     then putStrLn ""
     else do
       line <- getLine
-      case words line of
+      let inputLine = reverse (dropWhile isEnding (reverse line))
+      case words inputLine of
         [] -> repl showDerivs elx phandle
 
         [":quit"] -> putStrLn "Bye!"
@@ -54,13 +55,15 @@ repl showDerivs elx phandle = do
         [":derivs"] -> do
           let enabled = not showDerivs
           putStrLn ("Showing derivations: "
-                    ++ if enabled then "on" else "off")
+                    ++ (if enabled then "on" else "off"))
           repl enabled elx phandle
 
         input -> do
           let ws = map stdize input
           answer showDerivs elx phandle ws
           repl showDerivs elx phandle
+  where
+    isEnding c = isSpace c || c `elem` ".?!"
 
 -- Обработка обычного предложения.
 answer :: Bool -> Lexicon PythonCode -> PythonHandle -> [String] -> IO ()
@@ -68,7 +71,7 @@ answer showDerivs elx phandle ws = do
   let unknown = nub [w | w <- ws, null (Lambek.typesOf elx w)]
       readings = concat
         [Lambek.derivations elx goal ws | goal <- goalTypes elx]
-        
+
   if not (null unknown)
     then putStrLn ("Unknown words: " ++ intercalate ", " unknown)
     else if null readings
@@ -85,14 +88,18 @@ answer showDerivs elx phandle ws = do
               senses
           else return ()
 
-        case senses of
+        -- Объединяем эквивалентные прочтения, сохраняя разные смыслы.
+        let distinct =
+              nubBy (\(r, _) (r', _) -> sameMeaning r r') senses
+
+        case distinct of
           [(_, value)] -> putStrLn value
           _ -> do
             putStrLn "That sentence is ambiguous"
             mapM_ (\((e, _), value) ->
               putStrLn ("Sense [" ++ prettyLExp e ++ "]: " ++ value))
-              senses
-      
+              distinct
+
 main = do
   -- send console output immediately to the user
   hSetBuffering stdout NoBuffering
