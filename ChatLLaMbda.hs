@@ -17,6 +17,19 @@ import Data.List (nub, intercalate)
 -- (This will make it easier to look up words in the lexicon.)
 stdize (c:cs) = toUpper c : map toLower cs
 
+-- Проверяем, используется ли атомарный тип в словаре.
+usesAtom :: Atm -> Lexicon sem -> Bool
+usesAtom p lex = any (\(_, t, _) -> occurs t) (items lex)
+  where
+    occurs (Atm q) = p == q
+    occurs (DivL a b) = occurs a || occurs b
+    occurs (DivR b a) = occurs a || occurs b
+
+-- Принимаем предложения и, если словарь поддерживает их, вопросы.
+goalTypes :: Lexicon sem -> [LTp]
+goalTypes lex =
+  nub (stp lex : [Atm "q" | usesAtom "q" lex])
+
 -- read-eval-print-loop
 -- showDerivs определяет, показывать ли выражения вместе с ответом.
 repl :: Bool -> Lexicon PythonCode -> PythonHandle -> IO ()
@@ -53,8 +66,9 @@ repl showDerivs elx phandle = do
 answer :: Bool -> Lexicon PythonCode -> PythonHandle -> [String] -> IO ()
 answer showDerivs elx phandle ws = do
   let unknown = nub [w | w <- ws, null (Lambek.typesOf elx w)]
-      readings = Lambek.derivations elx (stp elx) ws
-
+      readings = concat
+        [Lambek.derivations elx goal ws | goal <- goalTypes elx]
+        
   if not (null unknown)
     then putStrLn ("Unknown words: " ++ intercalate ", " unknown)
     else if null readings
