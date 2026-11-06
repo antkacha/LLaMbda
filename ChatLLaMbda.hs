@@ -9,6 +9,7 @@ import Parser
 import PySupport
 
 import LExp (prettyLExp)
+import Semantics
 
 -- "standardize" the capitalization of a word by making the first
 -- letter uppercase and the following letters lowercase.
@@ -18,19 +19,23 @@ stdize (c:cs) = toUpper c : map toLower cs
 -- read-eval-print-loop
 repl :: Lexicon PythonCode -> PythonHandle -> IO ()
 repl elx phandle = do
-  -- print the prompt
   putStr "> "
-  -- get a line of input
   line <- getLine
-  -- split it up into "standardized" words
-  let ws = map stdize $ words line
-  -- test if the string of words is a grammatical sentence according to the lexicon
-  let readings = Lambek.derivations elx (stp elx) ws
+  let ws = map stdize (words line)
+      readings = Lambek.derivations elx (stp elx) ws
+
   if null readings
     then putStrLn "That is not a well-formed sentence"
     else do
-      putStrLn "I can derive your sentence as follows:"
-      mapM_ (\(e, _) -> putStrLn ("  " ++ prettyLExp e)) readings  -- repeat
+      values <- mapM (evalReading phandle) readings
+      case zip readings values of
+        [(_, value)] -> putStrLn value
+        senses -> do
+          putStrLn "That sentence is ambiguous"
+          mapM_ (\((e, _), value) ->
+            putStrLn ("Sense [" ++ prettyLExp e ++ "]: " ++ value))
+            senses
+
   repl elx phandle
       
 main = do
@@ -41,8 +46,8 @@ main = do
   -- input a database of facts
   db <- getDB
   -- launch a Python interpreter
-  phandle <- launchPython db
-  -- start the read-eval-print loop
+  phandle <- launchPython (PCode (text db ++ "\n" ++ pyPrelude))
+    -- start the read-eval-print loop
   putStrLn "Starting chat..."
   repl elx phandle
   where
