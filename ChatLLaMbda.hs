@@ -8,6 +8,8 @@ import qualified Lambek
 import Parser
 import PySupport
 
+import LExp (prettyLExp)
+
 -- "standardize" the capitalization of a word by making the first
 -- letter uppercase and the following letters lowercase.
 -- (This will make it easier to look up words in the lexicon.)
@@ -23,10 +25,12 @@ repl elx phandle = do
   -- split it up into "standardized" words
   let ws = map stdize $ words line
   -- test if the string of words is a grammatical sentence according to the lexicon
-  if Lambek.isGrammatical elx ws
-    then putStrLn "That is a well-formed sentence!"
-    else putStrLn "That is not a well-formed sentence"
-  -- repeat
+  let readings = Lambek.derivations elx (stp elx) ws
+  if null readings
+    then putStrLn "That is not a well-formed sentence"
+    else do
+      putStrLn "I can derive your sentence as follows:"
+      mapM_ (\(e, _) -> putStrLn ("  " ++ prettyLExp e)) readings  -- repeat
   repl elx phandle
       
 main = do

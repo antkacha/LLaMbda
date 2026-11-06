@@ -3,6 +3,7 @@
 module Lambek where
 
 import LTypes
+import LExp
 
 -- Все способы разделить список на две части.
 splits :: [a] -> [([a], [a])]
@@ -46,3 +47,71 @@ isGrammatical lex ws =
   not (null ws) &&
   or [dec_rinv gamma (stp lex)
      | gamma <- mapM (typesOf lex) ws]
+
+-- Выбираем имя, которого ещё нет в контексте.
+freshFor :: [(Var, LTp)] -> Var
+freshFor gamma =
+  case [[c] | c <- ['a'..'z'], [c] `notElem` used] of
+    x : _ -> x
+    []    -> numbered 0
+  where
+    used = map fst gamma
+
+    numbered :: Integer -> Var
+    numbered n
+      | name `elem` used = numbered (n + 1)
+      | otherwise = name
+      where name = "v" ++ show n
+
+-- Правые правила теперь строят выражения вместо ответа True/False.
+der_rinv :: [(Var, LTp)] -> LTp -> [LExp]
+der_rinv gamma (DivL a b) =
+  [L x e | e <- der_rinv ((x, a) : gamma) b]
+  where x = freshFor gamma
+
+der_rinv gamma (DivR b a) =
+  [L x e | e <- der_rinv (gamma ++ [(x, a)]) b]
+  where x = freshFor gamma
+
+der_rinv gamma (Atm p) =
+  [foldl A (V x) args
+  | (left, (x, a), right) <- picks gamma
+  , args <- der_lfoc left a right p]
+
+-- Для типа в фокусе собираем список его аргументов.
+der_lfoc :: [(Var, LTp)] -> LTp -> [(Var, LTp)] -> Atm -> [[LExp]]
+der_lfoc left (DivL a b) right p =
+  [e : args
+  | (far, near) <- splits left
+  , e <- der_rinv near a
+  , args <- der_lfoc far b right p]
+
+der_lfoc left (DivR b a) right p =
+  [e : args
+  | (near, far) <- splits right
+  , e <- der_rinv near a
+  , args <- der_lfoc left b far p]
+
+der_lfoc left (Atm q) right p
+  | null left && null right && q == p = [[]]
+  | otherwise = []
+
+  -- Прочтение: выражение и значения выбранных записей словаря.
+type Reading sem = (LExp, [(Var, sem)])
+
+-- Номер различает повторяющиеся слова в предложении.
+wordVar :: Int -> String -> Var
+wordVar i w = w ++ "_" ++ show i
+
+derivations :: Lexicon sem -> LTp -> [String] -> [Reading sem]
+derivations lex goal ws =
+  [(e, env)
+  | choice <- mapM entriesOf (zip [0..] ws)
+  , let gamma = [(x, t) | (x, t, _) <- choice]
+        env = [(x, value) | (x, _, value) <- choice]
+  , e <- der_rinv gamma goal]
+  where
+    entriesOf (i, w) =
+      [(wordVar i w, t, value)
+      | (word, t, value) <- items lex
+      , word == w]
