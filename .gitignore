@@ -1,0 +1,6 @@
+.DS_Store
+*.hi
+*.o
+ChatLLaMbda
+build/
+tests/*.out
