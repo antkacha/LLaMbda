@@ -37,3 +37,17 @@ And      : adj \ (adj / adj)    = lambda p : lambda q : lambda x : p(x) and q(x)
 Who      : q / (np \ s)         = lambda p : [x for x in animals if p(x)].
 Which    : (q / (np \ s)) / n   = lambda c : lambda p : [x for x in animals if c(x) and p(x)].
 Is       : (s / adj) / np       = lambda x : lambda p : p(x).
+
+Swims    : np \ s               = lambda x : x in swim.
+Not      : adj / adj            = lambda p : lambda x : not p(x).
+
+Or       : s \ (s / s)          = lambda x : lambda y : x or y.
+Or       : adj \ (adj / adj)    = lambda p : lambda q : lambda x : p(x) or q(x).
+
+Everyone : s / (np \ s)         = lambda p : all(p(x) for x in animals).
+Everyone : (s / np) \ s         = lambda p : all(p(x) for x in animals).
+Nobody   : s / (np \ s)         = lambda p : not any(p(x) for x in animals).
+Nobody   : (s / np) \ s         = lambda p : not any(p(x) for x in animals).
+
+No : (s / (np \ s)) / n = lambda q : lambda p : not any(p(x) and q(x) for x in animals).
+No : ((s / np) \ s) / n = lambda q : lambda p : not any(p(x) and q(x) for x in animals).
